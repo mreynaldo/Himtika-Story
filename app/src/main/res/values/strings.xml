@@ -1,0 +1,27 @@
+<resources>
+    <string name="app_name">Himtalks</string>
+    <string name="signup">Daftar</string>
+    <string name="login">Masuk</string>
+    <string name="message_welcome_page">Mau tau segala perkembangan seputar HIMTIKA dan mau ikutan upload keseruan kalian? Di Himtalks aja!</string>
+    <string name="title_welcome_page">Selamat datang di Himtika Talks!</string>
+    <string name="title_signup_page">Lengkapi data dirimu di bawah ini ya</string>
+    <string name="email">Email</string>
+    <string name="password">Password</string>
+    <string name="message_login_page">Masukkan dulu datamu ya</string>
+    <string name="title_login_page">Sudah siap untuk bagikan keseruan mu?</string>
+    <string name="name">Nama</string>
+    <string name="message_main_page">Selamat Belajar di Dicoding.</string>
+    <string name="greeting">Halo %1$s,</string>
+    <string name="logout">Keluar</string>
+    <string name="button_to_add_story">button to add story</string>
+    <string name="gallery">Gallery</string>
+    <string name="camera">Camera</string>
+    <string name="upload">Upload</string>
+    <string name="description">Description</string>
+    <string name="empty_image_warning">Tidak ada gambar yang di pilih</string>
+    <string name="upload_failed">Upload Failed!</string>
+    <string name="token_missing">Token Missing</string>
+    <string name="description_empty_warning">Deskripsi Tidak Boleh Kosong</string>
+    <string name="title_activity_maps">MapsActivity</string>
+    <string name="tidak_ada_cerita">Tidak ada cerita.</string>
+</resources>
