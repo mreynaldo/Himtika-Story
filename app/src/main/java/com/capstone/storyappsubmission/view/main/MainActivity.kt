@@ -1,8 +1,11 @@
 package com.capstone.storyappsubmission.view.main
 
+import android.appwidget.AppWidgetManager
+import android.content.ComponentName
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import android.util.Log
 import android.view.Menu
 import android.view.MenuItem
@@ -27,38 +30,26 @@ import com.capstone.storyappsubmission.view.welcome.WelcomeActivity
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import androidx.core.util.Pair
+import androidx.paging.LoadState
+import com.capstone.storyappsubmission.data.preference.UserPreference
+import com.capstone.storyappsubmission.view.ViewModelFactory
 import com.capstone.storyappsubmission.view.addstory.AddStoryActivity
+import com.capstone.storyappsubmission.view.dataStore
 import com.capstone.storyappsubmission.view.maps.MapsActivity
+import com.capstone.storyappsubmission.view.widget.StoryAppWidget
+import com.google.android.material.snackbar.Snackbar
+import kotlinx.coroutines.delay
 
 
 class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
-    private val tokenKey = stringPreferencesKey("user_token")
+    private lateinit var userPref: UserPreference
 
-    private val dataStore by lazy {
-        (applicationContext as MyApplication).dataStore
+    private val viewModel by viewModels<StoryViewModel> {
+        ViewModelFactory.getInstance(this)
     }
-
-    private val storyViewModel: StoryViewModel by viewModels()
-
     private lateinit var storyAdapter: StoryAdapter
-
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        binding = ActivityMainBinding.inflate(layoutInflater)
-        setContentView(binding.root)
-
-        setupView()
-        setupRecyclerView()
-        checkLoginStatus()
-
-        binding.btnAddStory.setOnClickListener {
-            val intent = Intent(this, AddStoryActivity::class.java)
-            startActivity(intent)
-        }
-
-    }
 
     override fun onCreateOptionsMenu(menu: Menu?): Boolean {
         menuInflater.inflate(R.menu.menu_main, menu)
@@ -67,117 +58,133 @@ class MainActivity : AppCompatActivity() {
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
         return when (item.itemId) {
-            R.id.logout -> {
-                logout()
-                true
-            }
             R.id.maps -> {
                 intent = Intent(this, MapsActivity::class.java)
                 startActivity(intent)
                 true
             }
+
+            R.id.logout -> {
+                val builder = AlertDialog.Builder(this)
+                builder.setMessage("Apakah Anda yakin ingin keluar?")
+                    .setCancelable(false)
+                    .setPositiveButton("Ya") { _, _ ->
+                        lifecycleScope.launch {
+                            val userPref = UserPreference.getInstance(dataStore)
+                            userPref.clearToken()
+
+                            Snackbar.make(binding.root, R.string.logout_success, Snackbar.LENGTH_SHORT)
+                                .show()
+
+                            updateWidget()
+
+                            delay(1000)
+
+                            val intent = Intent(this@MainActivity, WelcomeActivity::class.java)
+                            intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                            startActivity(intent)
+                            finish()
+                        }
+                    }
+                    .setNegativeButton("Batal") { dialog, _ ->
+                        dialog.dismiss()
+                    }
+
+                val alert = builder.create()
+                alert.show()
+
+                true
+            }
+
             else -> super.onOptionsItemSelected(item)
         }
     }
 
-    private fun setupView() {
-        @Suppress("DEPRECATION")
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            window.insetsController?.hide(WindowInsets.Type.statusBars())
-            binding.root.setPadding(0, 0, 0, 0)
-        } else {
-            window.setFlags(
-                WindowManager.LayoutParams.FLAG_FULLSCREEN,
-                WindowManager.LayoutParams.FLAG_FULLSCREEN
-            )
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        checkLoginStatus()
+        binding = ActivityMainBinding.inflate(layoutInflater)
+        setContentView(binding.root)
+
+        storyAdapter = StoryAdapter()
+
+        observeViewModel()
+        updateWidget()
+
+        binding.btnAddStory.setOnClickListener {
+            val intent = Intent(this, AddStoryActivity::class.java)
+            startActivity(intent)
+        }
+
+        binding.rvStory.apply {
+            layoutManager = LinearLayoutManager(context)
+            adapter = storyAdapter
         }
     }
-
-    private fun setupRecyclerView() {
-        storyAdapter = StoryAdapter() { selectedEvent ->
-            if (selectedEvent.id !=  null) {
-                val intent = Intent(this, DetailActivity::class.java).apply {
-                    putExtra("STORY_ID", selectedEvent.id)
-                }
-
-                val optionsCompat = ActivityOptionsCompat.makeSceneTransitionAnimation(
-                    this,
-                    Pair(binding.rvStory.findViewHolderForAdapterPosition(storyAdapter.currentList.indexOf(selectedEvent))?.itemView?.findViewById(R.id.imgItemPhoto), "profile"),
-                    Pair(binding.rvStory.findViewHolderForAdapterPosition(storyAdapter.currentList.indexOf(selectedEvent))?.itemView?.findViewById(R.id.tvItemName), "name"),
-                    Pair(binding.rvStory.findViewHolderForAdapterPosition(storyAdapter.currentList.indexOf(selectedEvent))?.itemView?.findViewById(R.id.tvItemDescription), "description")
-                )
-
-                startActivity(intent, optionsCompat.toBundle())
-            } else {
-                Log.d("StoryAdapter", "Invalid Story ID: ${selectedEvent.id}")
-            }
-        }
-        binding.rvStory.layoutManager = LinearLayoutManager(this)
-        binding.rvStory.adapter = storyAdapter
-    }
-
 
     private fun checkLoginStatus() {
+        userPref = UserPreference.getInstance(dataStore)
         lifecycleScope.launch {
-            val token = getToken()
-
-            if (token.isNullOrEmpty()) {
-                val intent = Intent(this@MainActivity, WelcomeActivity::class.java)
-                intent.flags = Intent.FLAG_ACTIVITY_CLEAR_TASK or Intent.FLAG_ACTIVITY_NEW_TASK
-                startActivity(intent)
-                finish()
-            } else {
-                fetchStories(token)
+            userPref.getUserToken().collect { token ->
+                if (token.isNullOrEmpty()) {
+                    val intent = Intent(this@MainActivity, WelcomeActivity::class.java)
+                    startActivity(intent)
+                    finish()
+                }
             }
         }
     }
 
-    private suspend fun getToken(): String? {
-        val preferences = dataStore.data.first()
-        return preferences[tokenKey]
-    }
+    private fun observeViewModel() {
+        viewModel.getAllStories.observe(this) {
+            storyAdapter.submitData(lifecycle, it)
+        }
 
-    private fun logout() {
-        val builder = AlertDialog.Builder(this)
-        builder.setMessage("Apakah Anda yakin ingin keluar?")
-            .setCancelable(false)
-            .setPositiveButton("Ya") { _, _ ->
-                lifecycleScope.launch {
-                    dataStore.edit { preferences ->
-                        preferences.remove(tokenKey)
-                    }
+        storyAdapter.addLoadStateListener { loadState ->
+            binding.progressBar.visibility =
+                if (loadState.refresh is LoadState.Loading && storyAdapter.itemCount == 0) {
+                    View.VISIBLE
+                } else {
+                    View.GONE
                 }
 
-                val intent = Intent(this, WelcomeActivity::class.java)
-                intent.flags = Intent.FLAG_ACTIVITY_CLEAR_TASK or Intent.FLAG_ACTIVITY_NEW_TASK
-                startActivity(intent)
-                finish()
-            }
-            .setNegativeButton("Batal") { dialog, _ ->
-                dialog.dismiss()
-            }
+            if (loadState.refresh is LoadState.Error) {
 
-        val alert = builder.create()
-        alert.show()
-    }
-
-    private fun fetchStories(token: String) {
-        binding.progressBar.visibility = View.VISIBLE
-
-        storyViewModel.fetchStories(token)
-
-        storyViewModel.stories.observe(this, { stories ->
-
-            binding.progressBar.visibility = View.GONE
-
-            if (stories.isNullOrEmpty()) {
-                binding.tvNoStories.visibility = View.VISIBLE
-
+                val error = (loadState.refresh as LoadState.Error).error
+                Snackbar.make(
+                    binding.root,
+                    error.localizedMessage ?: getString(R.string.error_loading_data),
+                    Snackbar.LENGTH_INDEFINITE
+                )
+                    .setAction(getString(R.string.retry)) {
+                        storyAdapter.retry()
+                    }
+                    .show()
             } else {
                 binding.tvNoStories.visibility = View.GONE
-                storyAdapter.submitList(stories)
             }
-        })
+        }
+    }
+
+    private fun updateWidget() {
+        val ids = AppWidgetManager.getInstance(application).getAppWidgetIds(
+            ComponentName(application, StoryAppWidget::class.java)
+        )
+        AppWidgetManager.getInstance(application)
+            .notifyAppWidgetViewDataChanged(ids, R.id.stack_view)
+        Log.d("Loginctivity", "Widget IDs: ${ids.joinToString()}")
+        val intent = Intent(this, StoryAppWidget::class.java).apply {
+            action = AppWidgetManager.ACTION_APPWIDGET_UPDATE
+            putExtra(AppWidgetManager.EXTRA_APPWIDGET_IDS, ids)
+            Log.d("Loginctivity", "Sending broadcast for widget update")
+        }
+        sendBroadcast(intent)
+        Log.d("Loginctivity", "Broadcast sent for widget update")
+    }
+
+    override fun onResume() {
+        super.onResume()
+        observeViewModel()
     }
 
 }

@@ -4,20 +4,36 @@ import android.animation.AnimatorSet
 import android.animation.ObjectAnimator
 import android.os.Build
 import android.os.Bundle
+import android.text.Editable
+import android.text.TextWatcher
 import android.util.Log
 import android.view.View
 import android.view.WindowInsets
 import android.view.WindowManager
+import android.widget.Button
+import android.widget.EditText
 import android.widget.Toast
 import androidx.activity.viewModels
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.lifecycleScope
+import com.capstone.storyappsubmission.R
+import com.capstone.storyappsubmission.customview.EmailEditText
+import com.capstone.storyappsubmission.customview.PasswordEditText
+import com.capstone.storyappsubmission.data.Results
 import com.capstone.storyappsubmission.databinding.ActivityRegisterBinding
+import com.capstone.storyappsubmission.view.ViewModelFactory
+import kotlinx.coroutines.launch
 
 class RegisterActivity : AppCompatActivity() {
     private lateinit var binding: ActivityRegisterBinding
+    private lateinit var registerButton: Button
+    private lateinit var nameEditText: EditText
+    private lateinit var emailEditText: EmailEditText
+    private lateinit var passwordEditText: PasswordEditText
+
     private val registerViewModel: RegisterViewModel by viewModels {
-        RegisterViewModelFactory(RegisterRepository())
+        ViewModelFactory.getInstance(this)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -26,8 +42,22 @@ class RegisterActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         setupView()
-        setupAction()
         playAnimation()
+
+        registerButton = binding.signupButton
+        nameEditText = binding.nameEditText
+        emailEditText = binding.emailEditText
+        passwordEditText = binding.passwordEditText
+
+        registerButton.isEnabled = false
+
+        nameEditText.addTextChangedListener(registerTextWatcher)
+        emailEditText.addTextChangedListener(registerTextWatcher)
+        passwordEditText.addTextChangedListener(registerTextWatcher)
+
+        binding.signupButton.setOnClickListener {
+            setupAction()
+        }
     }
 
     private fun playAnimation() {
@@ -81,29 +111,83 @@ class RegisterActivity : AppCompatActivity() {
         supportActionBar?.hide()
     }
 
-    private fun setupAction() {
-        binding.signupButton.setOnClickListener {
-            val name = binding.nameEditText.text.toString()
-            val email = binding.emailEditText.text.toString()
-            val password = binding.passwordEditText.text.toString()
+    private val registerTextWatcher = object : TextWatcher {
+        override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
 
-            registerViewModel.register(name, email, password).observe(this, { response ->
-                if (response.error) {
-                    Toast.makeText(this, "Error: ${response.message}", Toast.LENGTH_SHORT).show()
-                    Log.e("RegisterActivity", "Registration failed: ${response.message}")
-                } else {
-                    AlertDialog.Builder(this).apply {
-                        setTitle("Yeah! ${response.message}")
-                        setMessage("Akun dengan $email sudah jadi nih. Yuk, login dan belajar coding.")
-                        setPositiveButton("Lanjut") { _, _ ->
-                            finish()
+        override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+            validateFields()
+        }
+
+        override fun afterTextChanged(s: Editable?) {}
+    }
+
+    private fun validateFields() {
+        val name = nameEditText.text.toString()
+        val email = emailEditText.text.toString()
+        val password = passwordEditText.text.toString()
+
+        val isNameValid = name.isNotEmpty()
+        val isEmailValid =
+            email.isNotEmpty() && android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()
+        val isPasswordValid = password.length >= 8
+
+        registerButton.isEnabled = isNameValid && isEmailValid && isPasswordValid
+    }
+
+    private fun setupAction() {
+        val name = binding.nameEditText.text.toString()
+        val email = binding.emailEditText.text.toString()
+        val password = binding.passwordEditText.text.toString()
+        lifecycleScope.launch {
+            registerViewModel.register(name, email, password)
+            registerViewModel.registerResult.collect { results ->
+                when (results) {
+                    is Results.Loading -> {
+                        showLoading(true)
+                    }
+
+                    is Results.Success -> {
+                        showLoading(false)
+                        Log.d("RegisterActivity", "Register success: ${results.data.message}")
+                        Toast.makeText(
+                            this@RegisterActivity,
+                            getString(R.string.register_success) + results.data.message,
+                            Toast.LENGTH_SHORT
+                        ).show()
+                        AlertDialog.Builder(this@RegisterActivity).apply {
+                            setTitle("Yeah! ${results.data.message}")
+                            setMessage("Akun dengan $email sudah jadi nih. \nYuk, login dan bagikan keseruan mu di Himtalks")
+                            setPositiveButton("Lanjut") { _, _ ->
+                                finish()
+                            }
+                            create()
+                            show()
                         }
-                        create()
-                        show()
+                    }
+
+                    is Results.Error -> {
+                        showLoading(false)
+                        Log.e("RegisterActivity", "Error: ${results.error}")
+                        Toast.makeText(
+                            this@RegisterActivity,
+                            getString(R.string.register_error) + results.error,
+                            Toast.LENGTH_SHORT
+                        ).show()
                     }
                 }
-            })
+            }
+        }
 
+    }
+
+    private fun showLoading(isLoading: Boolean) {
+        if (isLoading) {
+            binding.progressBar.visibility = View.VISIBLE
+            binding.signupButton.isEnabled = false
+        } else {
+            binding.progressBar.visibility = View.GONE
+            binding.signupButton.isEnabled = true
         }
     }
 }
+

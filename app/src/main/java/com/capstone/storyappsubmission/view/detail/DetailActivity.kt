@@ -16,6 +16,8 @@ import com.capstone.storyappsubmission.R
 import com.capstone.storyappsubmission.data.remote.response.ListStoryItem
 import com.capstone.storyappsubmission.data.datastore.MyApplication
 import com.capstone.storyappsubmission.databinding.ActivityDetailBinding
+import com.capstone.storyappsubmission.helper.DateUtils
+import com.capstone.storyappsubmission.view.ViewModelFactory
 import com.google.android.material.imageview.ShapeableImageView
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -24,12 +26,8 @@ import kotlinx.coroutines.launch
 class DetailActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityDetailBinding
-    private val detailViewModel: DetailViewModel by viewModels()
-
-    private val tokenKey = stringPreferencesKey("user_token")
-
-    private val dataStore by lazy {
-        (applicationContext as MyApplication).dataStore
+    private val viewModel by viewModels<DetailViewModel> {
+        ViewModelFactory.getInstance(this)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -39,9 +37,14 @@ class DetailActivity : AppCompatActivity() {
         binding = ActivityDetailBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        lifecycleScope.launch {
-            fetchStoryDetails()
-        }
+        val storyId = intent.getStringExtra(EXTRA_STORY_ID)
+        val storyName = intent.getStringExtra(EXTRA_STORY_NAME)
+        val storyDescription = intent.getStringExtra(EXTRA_STORY_DESCRIPTION)
+        val storyDate = intent.getStringExtra(EXTRA_STORY_DATE)
+        val storyImageUrl = intent.getStringExtra(EXTRA_STORY_IMAGE_URL)
+
+        observeViewModel(storyId, storyName, storyDescription, storyDate, storyImageUrl)
+
 
         window.enterTransition = TransitionInflater.from(this).inflateTransition(android.R.transition.fade)
 
@@ -63,53 +66,42 @@ class DetailActivity : AppCompatActivity() {
 
     }
 
-    private suspend fun getToken(): String? {
-        val preferences = dataStore.data.first()
-        return preferences[tokenKey]
-    }
-
-    private suspend fun fetchStoryDetails() {
-        val storyId = intent.getStringExtra("STORY_ID")
-        val token = getToken()
-
-        showLoading(true)
-
+    private fun observeViewModel(
+        storyId: String?,
+        storyName: String?,
+        storyDescription: String?,
+        storyDate: String?,
+        storyImageUrl: String?
+    ) {
         if (storyId != null) {
-            if (token != null) {
-                detailViewModel.fetchStoryDetail(storyId, token)
-            }
+            viewModel.getDetailStory(storyId).observe(this) { storyDetail ->
+                if (storyDetail != null) {
+                    binding.tvItemName.text = storyName
+                    binding.tvItemDescription.text = storyDescription
+                    binding.tvDetailDate.text = storyDate?.let { DateUtils.localizeDate(it) }
+                    Glide.with(this)
+                        .load(storyImageUrl)
+                        .error(R.drawable.ic_error)
+                        .into(binding.imgItemPhoto)
 
-            // Mengamati LiveData dari ViewModel
-            detailViewModel.storyDetail.observe(this@DetailActivity, { story ->
-                if (story != null) {
-                    displayStoryDetail(story)
-                } else {
-                    Toast.makeText(
-                        this@DetailActivity,
-                        "Failed to fetch story details",
-                        Toast.LENGTH_SHORT
-                    ).show()
+                    binding.imgItemPhoto.transitionName = "sharedImage"
                 }
-                showLoading(false)
-            })
+            }
         } else {
-            Toast.makeText(this@DetailActivity, "Invalid Story ID", Toast.LENGTH_SHORT).show()
-            showLoading(false)
+            Toast.makeText(this, getString(R.string.error), Toast.LENGTH_SHORT).show()
+            finish()
         }
-    }
-
-    private fun displayStoryDetail(story: ListStoryItem) {
-        binding.apply {
-            tvItemName.text = story.name
-            tvItemDescription.text = story.description
-            Glide.with(this@DetailActivity)
-                .load(story.photoUrl)
-                .into(imgItemPhoto)
-        }
-
     }
 
     private fun showLoading(isLoading: Boolean) {
         binding.progressBar.visibility = if (isLoading) View.VISIBLE else View.GONE
+    }
+
+    companion object {
+        const val EXTRA_STORY_ID = "extra_story_id"
+        const val EXTRA_STORY_NAME = "extra_story_name"
+        const val EXTRA_STORY_DESCRIPTION = "extra_story_description"
+        const val EXTRA_STORY_DATE = "extra_story_date"
+        const val EXTRA_STORY_IMAGE_URL = "extra_story_image_url"
     }
 }

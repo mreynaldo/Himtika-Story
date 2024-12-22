@@ -2,7 +2,7 @@
     <string name="app_name">Himtalks</string>
     <string name="signup">Daftar</string>
     <string name="login">Masuk</string>
-    <string name="message_welcome_page">Mau tau segala perkembangan seputar HIMTIKA dan mau ikutan upload keseruan kalian? Di Himtalks aja!</string>
+    <string name="message_welcome_page">Mau tau segala perkembangan seputar HIMTIKA dan mau ikutan upload keseruan kalian? \nDi Himtalks aja!</string>
     <string name="title_welcome_page">Selamat datang di Himtika Talks!</string>
     <string name="title_signup_page">Lengkapi data dirimu di bawah ini ya</string>
     <string name="email">Email</string>
@@ -10,7 +10,7 @@
     <string name="message_login_page">Masukkan dulu datamu ya</string>
     <string name="title_login_page">Sudah siap untuk bagikan keseruan mu?</string>
     <string name="name">Nama</string>
-    <string name="message_main_page">Selamat Belajar di Dicoding.</string>
+    <string name="message_main_page">Ekperesikan keseruan mu di Himtalks</string>
     <string name="greeting">Halo %1$s,</string>
     <string name="logout">Keluar</string>
     <string name="button_to_add_story">button to add story</string>
@@ -24,4 +24,20 @@
     <string name="description_empty_warning">Deskripsi Tidak Boleh Kosong</string>
     <string name="title_activity_maps">MapsActivity</string>
     <string name="tidak_ada_cerita">Tidak ada cerita.</string>
+    <string name="register_success">"Register succes: "</string>
+    <string name="register_error">"Register error: "</string>
+    <string name="retry">Try again</string>
+    <string name="error_loading_data">Error loading data</string>
+    <string name="empty_view_text">Login First</string>
+    <string name="logout_success">Logged out successfully</string>
+    <string name="error">Invalid Id / Token</string>
+    <string name="login_success">Login Succes</string>
+    <string name="add_location">Add Location</string>
+    <string name="location_succes">Location Succes</string>
+    <string name="location_failed">Unable to get location/Turn on your GPS</string>
+    <string name="permission_request_granted">Permission Request Granted</string>
+    <string name="permission_request_denied">Permissio Request Denied</string>
+    <string name="location_on_switch_on">Location ON</string>
+    <string name="location_on_switch_off">Location OFF</string>
+    <string name="upload_success">Uploaded story success</string>
 </resources>

@@ -2,6 +2,7 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     id("kotlin-parcelize")
+    id("com.google.devtools.ksp")
     alias(libs.plugins.google.android.libraries.mapsplatform.secrets.gradle.plugin)
 }
 
@@ -49,6 +50,12 @@ dependencies {
     implementation(libs.androidx.activity)
     implementation(libs.androidx.constraintlayout)
     implementation(libs.play.services.maps)
+    implementation(libs.androidx.room.common)
+    implementation(libs.androidx.room.ktx)
+    implementation(libs.androidx.paging.common.android)
+    implementation(libs.androidx.espresso.idling.resource)
+    implementation(libs.androidx.paging.runtime.ktx)
+    implementation(libs.play.services.location)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
@@ -69,6 +76,9 @@ dependencies {
 
     implementation(libs.androidx.exifinterface)
 
-
+    implementation ("com.squareup.picasso:picasso:2.8")
+    ksp("androidx.room:room-compiler:2.5.0")
+    implementation(libs.androidx.room.runtime) // Pastikan versi terbaru
+    implementation(libs.room.paging) // Tambahkan dependensi ini
 
 }

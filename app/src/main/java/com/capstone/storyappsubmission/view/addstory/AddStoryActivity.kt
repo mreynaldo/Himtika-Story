@@ -1,6 +1,9 @@
 package com.capstone.storyappsubmission.view.addstory
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.location.Location
 import android.net.Uri
 import android.os.Bundle
 import android.util.Log
@@ -8,19 +11,31 @@ import android.view.View
 import android.widget.Toast
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.lifecycle.lifecycleScope
 import com.capstone.storyappsubmission.R
+import com.capstone.storyappsubmission.data.Results
 import com.capstone.storyappsubmission.data.remote.retrofit.ApiConfig
 import com.capstone.storyappsubmission.data.remote.response.FileUploadResponse
 import com.capstone.storyappsubmission.data.datastore.MyApplication
 import com.capstone.storyappsubmission.databinding.ActivityAddStoryBinding
+import com.capstone.storyappsubmission.helper.getImageUri
+import com.capstone.storyappsubmission.helper.reduceFileImage
+import com.capstone.storyappsubmission.helper.uriToFile
+import com.capstone.storyappsubmission.view.ViewModelFactory
 import com.capstone.storyappsubmission.view.main.MainActivity
+import com.google.android.gms.location.FusedLocationProviderClient
+import com.google.android.gms.location.LocationServices
+import com.google.android.material.materialswitch.MaterialSwitch
+import com.google.android.material.snackbar.Snackbar
 import com.google.gson.Gson
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
 import okhttp3.RequestBody.Companion.asRequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -30,17 +45,80 @@ class AddStoryActivity : AppCompatActivity() {
     private lateinit var binding: ActivityAddStoryBinding
 
     private var currentImageUri: Uri? = null
-    private val tokenKey = stringPreferencesKey("user_token")
+    private lateinit var materialSwitch: MaterialSwitch
+    private lateinit var fusedLocationClient: FusedLocationProviderClient
+
+    private var lat: Double? = null
+    private var lon: Double? = null
 
 
-    private val dataStore by lazy {
-        (applicationContext as MyApplication).dataStore
+    private val viewModel by viewModels<AddStoryViewModel> {
+        ViewModelFactory.getInstance(this)
     }
+
+    private val requestPermissionLauncher =
+        registerForActivityResult(
+            ActivityResultContracts.RequestPermission()
+        ) { isGranted: Boolean ->
+            if (isGranted) {
+                Toast.makeText(this, R.string.permission_request_granted, Toast.LENGTH_LONG).show()
+            } else {
+                Toast.makeText(this, R.string.permission_request_denied, Toast.LENGTH_LONG).show()
+            }
+        }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityAddStoryBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
+
+        materialSwitch = binding.locationSwitch
+
+        materialSwitch.isChecked = false
+        materialSwitch.setOnCheckedChangeListener { _, isChecked ->
+            if (isChecked) {
+                Toast.makeText(this, R.string.location_on_switch_on, Toast.LENGTH_SHORT).show()
+                getLocation()
+            } else {
+                Toast.makeText(this, R.string.location_on_switch_off, Toast.LENGTH_SHORT).show()
+                lat = null
+                lon = null
+            }
+        }
+
+        viewModel.imageUri.observe(this) { uri ->
+            if (uri != null) {
+                currentImageUri = uri
+                showImage()
+            }
+        }
+
+        viewModel.isLoading.observe(this) { isLoading ->
+            showLoading(isLoading)
+        }
+
+        viewModel.uploadResult.observe(this) { result ->
+            when (result) {
+                is Results.Loading -> showLoading(true)
+                is Results.Success -> {
+                    result.data.message?.let {
+                        Snackbar.make(binding.root, it, Snackbar.LENGTH_SHORT).show()
+                    }
+                    showLoading(false)
+                    Toast.makeText(this, R.string.upload_success, Toast.LENGTH_SHORT).show()
+                    val intent = Intent(this, MainActivity::class.java)
+                    intent.flags = Intent.FLAG_ACTIVITY_CLEAR_TASK or Intent.FLAG_ACTIVITY_NEW_TASK
+                    startActivity(intent)
+                    finish()
+                }
+                is Results.Error -> {
+                    Snackbar.make(binding.root, result.error, Snackbar.LENGTH_SHORT).show()
+                    showLoading(true)
+                }
+            }
+        }
+
 
         binding.galleryButton.setOnClickListener { startGallery() }
         binding.cameraButton.setOnClickListener { startCamera() }
@@ -85,67 +163,59 @@ class AddStoryActivity : AppCompatActivity() {
     }
 
     private fun uploadImage() {
-        currentImageUri?.let { uri ->
-            val imageFile = uriToFile(uri, this).reduceFileImage()
-            Log.d("Image File", "showImage: ${imageFile.path}")
+        val description = binding.editText.text.toString()
+        if (description.isEmpty()) {
+            Snackbar.make(binding.root, R.string.description_empty_warning, Snackbar.LENGTH_SHORT).show()
+            return
+        }
+        val descriptionReqBody = description.toRequestBody("text/plain".toMediaTypeOrNull())
 
-            val description = binding.edtDesc.editText?.text.toString()
-            if (description.isEmpty()) {
-                showToast(getString(R.string.description_empty_warning))
-                return
-            }
+        if (currentImageUri == null) {
+            Snackbar.make(binding.root, R.string.empty_image_warning, Snackbar.LENGTH_SHORT).show()
+            return
+        }
 
-            showLoading(true)
-
-            val requestBody = description.toRequestBody("text/plain".toMediaType())
-            val requestImageFile = imageFile.asRequestBody("image/jpeg".toMediaType())
-            val multipartBody = MultipartBody.Part.createFormData(
+        val imageFile = uriToFile(currentImageUri!!, this)
+        val compressedImage = imageFile.reduceFileImage()
+        val photoRequestBody = compressedImage.asRequestBody("image/jpeg".toMediaTypeOrNull())
+        val photoMultipart =
+            MultipartBody.Part.createFormData(
                 "photo",
-                imageFile.name,
-                requestImageFile
+                compressedImage.name,
+                photoRequestBody
             )
 
-            lifecycleScope.launch {
-                val token = getToken()
+        val lat = lat?.toString()?.toRequestBody("text/plain".toMediaTypeOrNull())
+        val lon = lon?.toString()?.toRequestBody("text/plain".toMediaTypeOrNull())
 
-                if (token.isNullOrEmpty()) {
-                    showToast(getString(R.string.token_missing))
-                    showLoading(false)
-                    return@launch
-                }
+        viewModel.uploadStory(descriptionReqBody, photoMultipart, lat, lon)
+    }
 
-                try {
-                    val apiService = ApiConfig.getApiServiceWithAuth("Bearer $token")
-                    val successResponse = apiService.uploadStory("Bearer $token", multipartBody, requestBody)
-
-                    showToast(successResponse.message)
-                    showLoading(false)
-
-                    val intent = Intent(this@AddStoryActivity, MainActivity::class.java)
-                    intent.flags = Intent.FLAG_ACTIVITY_CLEAR_TASK or Intent.FLAG_ACTIVITY_NEW_TASK
-                    startActivity(intent)
-
-                } catch (e: HttpException) {
-                    val errorBody = e.response()?.errorBody()?.string()
-                    val errorResponse = Gson().fromJson(errorBody, FileUploadResponse::class.java)
-                    showToast(errorResponse.message)
-                    showLoading(false)
-                }catch (e: Exception) {
-                    showToast(getString(R.string.upload_failed))
-                    showLoading(false)
+    private fun getLocation() {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+            fusedLocationClient.lastLocation.addOnSuccessListener { location: Location? ->
+                if (location != null) {
+                    lat = location.latitude
+                    lon = location.longitude
+                    Toast.makeText(this, R.string.location_succes, Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(this, R.string.location_failed, Toast.LENGTH_SHORT).show()
                 }
             }
-        } ?: showToast(getString(R.string.empty_image_warning))
+        } else {
+            requestPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
+        }
     }
 
-    private suspend fun getToken(): String? {
-        val preferences = dataStore.data.first()
-        return preferences[tokenKey]
+
+
+    private fun showLoading(b: Boolean) {
+        binding.progressBar.visibility = if (b) View.VISIBLE else View.GONE
+        binding.uploadButton.isEnabled = !b
+        binding.cameraButton.isEnabled = !b
+        binding.galleryButton.isEnabled = !b
     }
 
-    private fun showLoading(isLoading: Boolean) {
-        binding.progressBar.visibility = if (isLoading) View.VISIBLE else View.GONE
-    }
     private fun showToast(message: String) {
         Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
     }

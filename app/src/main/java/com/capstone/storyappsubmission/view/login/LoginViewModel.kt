@@ -5,32 +5,36 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.liveData
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.lifecycle.viewModelScope
+import com.capstone.storyappsubmission.data.Results
 import com.capstone.storyappsubmission.data.remote.response.LoginResponse
 import com.capstone.storyappsubmission.data.datastore.MyApplication
+import com.capstone.storyappsubmission.data.remote.response.LoginResult
+import com.capstone.storyappsubmission.data.repository.StoryRepository
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
-class LoginViewModel(private val loginRepository: LoginRepository, private val context: Context) : ViewModel() {
+class LoginViewModel(private val repository: StoryRepository) : ViewModel() {
 
-    private val dataStore = (context.applicationContext as MyApplication).dataStore
-    private val tokenKey = stringPreferencesKey("user_token")
-
-    fun login(email: String, password: String) = liveData(Dispatchers.IO) {
-        try {
-            val response = loginRepository.login(email, password)
-            if (!response.error && response.loginResult != null) {
-                saveToken(response.loginResult.token)
-                emit(response)
-            } else {
-                emit(LoginResponse(error = true, message = response.message, loginResult = null))
+    fun login(email: String, password: String, onSuccess: (LoginResult) -> Unit, onError: (String) -> Unit) {
+        viewModelScope.launch {
+            when (val results = repository.login(email, password)) {
+                is Results.Loading -> {
+                    // Do nothing
+                }
+                is Results.Success -> {
+                    val loginResult = results.data.loginResult
+                    if (loginResult != null) {
+                        repository.saveToken(loginResult.token ?: "")
+                        onSuccess(loginResult)
+                    } else {
+                        onError("Login failed: no results")
+                    }
+                }
+                is Results.Error -> {
+                    onError(results.error)
+                }
             }
-        } catch (e: Exception) {
-            emit(LoginResponse(error = true, message = e.message ?: "Unknown Error", loginResult = null))
-        }
-    }
-
-    private suspend fun saveToken(token: String) {
-        dataStore.edit { preferences ->
-            preferences[tokenKey] = token
         }
     }
 }

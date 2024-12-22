@@ -22,7 +22,7 @@
     <com.google.android.material.imageview.ShapeableImageView
         android:id="@+id/imgItemPhoto"
         android:layout_width="0dp"
-        android:layout_height="300dp"
+        android:layout_height="400dp"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent"
@@ -60,5 +60,17 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/tvItemName"
         app:layout_constraintVertical_bias="0.0"/>
+    <TextView
+        android:id="@+id/tvDetailDate"
+        android:layout_width="0dp"
+        android:layout_marginStart="10dp"
+        android:layout_marginEnd="10dp"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:textSize="14sp"
+        app:layout_constraintTop_toBottomOf="@id/tvItemDescription"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        tools:text="Created at: 2024-10-22" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>

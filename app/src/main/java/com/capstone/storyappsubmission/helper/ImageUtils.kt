@@ -1,4 +1,4 @@
-package com.capstone.storyappsubmission.view.addstory
+package com.capstone.storyappsubmission.helper
 
 import android.content.ContentValues
 import android.content.Context

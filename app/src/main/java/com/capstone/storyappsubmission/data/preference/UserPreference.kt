@@ -1,4 +1,4 @@
-package com.capstone.storyappsubmission.data
+package com.capstone.storyappsubmission.data.preference
 
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.edit
@@ -8,8 +8,6 @@ import kotlinx.coroutines.flow.map
 import androidx.datastore.preferences.core.Preferences
 
 class UserPreference(private val dataStore: DataStore<Preferences>) {
-
-    private val USER_TOKEN_KEY = stringPreferencesKey("user_token")
 
     suspend fun saveUserToken(token: String) {
         dataStore.edit { preferences ->
@@ -23,7 +21,14 @@ class UserPreference(private val dataStore: DataStore<Preferences>) {
         }
     }
 
+    suspend fun clearToken() {
+        dataStore.edit { preferences ->
+            preferences.remove(USER_TOKEN_KEY)
+        }
+    }
+
     companion object {
+        private val USER_TOKEN_KEY = stringPreferencesKey("user_token")
         @Volatile
         private var INSTANCE: UserPreference? = null
 
